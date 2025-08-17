@@ -1,3 +1,4 @@
+
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { PlainTextPlugin } from '@lexical/react/LexicalPlainTextPlugin';
@@ -9,10 +10,11 @@ import { $getRoot, $createParagraphNode, $createTextNode, EditorState } from 'le
 import { Version } from '../types';
 import SaveIcon from './icons/SaveIcon';
 import LoadIcon from './icons/LoadIcon';
-import UploadIcon from './icons/UploadIcon';
 import CopyIcon from './icons/CopyIcon';
 import MenuIcon from './icons/MenuIcon';
 import GeminiIcon from './icons/GeminiIcon';
+import TrashIcon from './icons/TrashIcon';
+import ChevronRightIcon from './icons/ChevronRightIcon';
 
 
 interface EditorPaneProps {
@@ -29,6 +31,8 @@ interface EditorPaneProps {
   scrollRef: React.RefObject<HTMLDivElement>;
   onGeminiReview: () => void;
   isReviewing: boolean;
+  onClearEditor: () => void;
+  paneTitle: string;
 }
 
 const editorTheme = {
@@ -67,16 +71,17 @@ const EditorPane: React.FC<EditorPaneProps> = ({
     versionName, 
     editorKey,
     versions,
-    activeVersionId,
     onLoadEditor,
     onSave,
-    onFileUpload,
     onCopyToClipboard,
     scrollRef,
     onGeminiReview,
-    isReviewing
+    isReviewing,
+    onClearEditor,
+    paneTitle
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isLoadSubMenuOpen, setIsLoadSubMenuOpen] = useState(false);
   
   const wordCount = useMemo(() => {
     const words = content.trim().match(/\S+/g);
@@ -85,7 +90,6 @@ const EditorPane: React.FC<EditorPaneProps> = ({
 
   const lineCount = useMemo(() => content.split('\n').length, [content]);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
@@ -107,21 +111,15 @@ const EditorPane: React.FC<EditorPaneProps> = ({
     };
   }, [menuRef, menuButtonRef]);
 
+  useEffect(() => {
+    if (!isMenuOpen) {
+      setIsLoadSubMenuOpen(false);
+    }
+  }, [isMenuOpen]);
+
   const handleScroll = () => {
     if (lineNumbersRef.current && scrollRef.current) {
       lineNumbersRef.current.scrollTop = scrollRef.current.scrollTop;
-    }
-  };
-
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      onFileUpload(file);
-      event.target.value = '';
     }
   };
 
@@ -138,24 +136,10 @@ const EditorPane: React.FC<EditorPaneProps> = ({
     <div className="flex flex-col bg-brand-surface rounded-lg shadow-lg overflow-hidden border border-brand-border">
       <div className="p-3 bg-slate-800 border-b border-brand-border flex justify-between items-center flex-wrap gap-2">
         <div>
-          <h2 className="text-lg font-semibold text-white">Editor</h2>
+          <h2 className="text-lg font-semibold text-white">{paneTitle}</h2>
           <p className="text-sm text-brand-text-dim">{versionName}</p>
         </div>
         <div className="flex items-center gap-2">
-           <div className="relative group flex items-center px-3 py-2 rounded-md hover:bg-slate-700 transition-colors">
-            <LoadIcon />
-            <select
-              value={activeVersionId || ''}
-              onChange={(e) => onLoadEditor(e.target.value)}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              aria-label="Load version into editor"
-            >
-              <option value="" disabled>Load Version</option>
-              {versions.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
-            <span className="ml-2 text-sm hidden sm:inline">Load</span>
-          </div>
-          
           <button
             onClick={onGeminiReview}
             className="group flex items-center px-3 py-2 rounded-md hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -184,22 +168,37 @@ const EditorPane: React.FC<EditorPaneProps> = ({
                 role="menu"
                 aria-orientation="vertical"
               >
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  accept=".txt"
-                  className="hidden"
-                  aria-hidden="true"
-                />
-                <button
-                  onClick={() => { handleUploadClick(); setIsMenuOpen(false); }}
-                  className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-brand-text hover:bg-slate-600 transition-colors"
-                  role="menuitem"
-                >
-                  <UploadIcon />
-                  <span>Upload .txt</span>
-                </button>
+                <div className="relative" onMouseLeave={() => setIsLoadSubMenuOpen(false)}>
+                    <button
+                        onClick={() => setIsLoadSubMenuOpen(p => !p)}
+                        onMouseEnter={() => setIsLoadSubMenuOpen(true)}
+                        className="w-full text-left flex items-center justify-between gap-3 px-4 py-2 text-sm text-brand-text hover:bg-slate-600 transition-colors"
+                        role="menuitem"
+                        aria-haspopup="true"
+                        aria-expanded={isLoadSubMenuOpen}
+                    >
+                        <div className="flex items-center gap-3">
+                            <LoadIcon />
+                            <span>Load Version</span>
+                        </div>
+                        <ChevronRightIcon />
+                    </button>
+                    {isLoadSubMenuOpen && versions.length > 0 && (
+                        <div className="absolute right-full top-0 mt-[-0.25rem] w-64 max-h-72 overflow-y-auto bg-slate-600 rounded-md shadow-lg border border-brand-border z-20 py-1">
+                        {versions.slice().reverse().map(v => (
+                            <button
+                                key={v.id}
+                                onClick={() => { onLoadEditor(v.id); setIsMenuOpen(false); }}
+                                className="w-full text-left truncate px-4 py-2 text-sm text-brand-text hover:bg-slate-500 transition-colors"
+                                role="menuitem"
+                                title={v.name}
+                            >
+                            {v.name}
+                            </button>
+                        ))}
+                        </div>
+                    )}
+                </div>
                 <button
                   onClick={() => { onCopyToClipboard(); setIsMenuOpen(false); }}
                   className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-brand-text hover:bg-slate-600 transition-colors"
@@ -215,6 +214,16 @@ const EditorPane: React.FC<EditorPaneProps> = ({
                 >
                   <SaveIcon />
                   <span>Save Version</span>
+                </button>
+                <div className="my-1 border-t border-slate-600"></div>
+                <button
+                  onClick={() => { onClearEditor(); setIsMenuOpen(false); }}
+                  className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:bg-slate-600 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  role="menuitem"
+                  disabled={!content.trim()}
+                >
+                  <TrashIcon />
+                  <span>Clear Text</span>
                 </button>
               </div>
             )}
