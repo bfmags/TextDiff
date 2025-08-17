@@ -1,5 +1,5 @@
 {
-  "name": "Text Diff Editor",
+  "name": "DiffPulse",
   "description": "An application for authors and editors to compare and review different versions of a novel. It provides a side-by-side view with an editable pane and a read-only pane that highlights text differences.",
   "requestFramePermissions": []
 }

@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 const LoadIcon: React.FC = () => (
@@ -13,7 +12,7 @@ const LoadIcon: React.FC = () => (
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
-      d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4M4 7s0 0 0 0m16 0s0 0 0 0M12 11v6m-4-3h8"
+      d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"
     />
   </svg>
 );

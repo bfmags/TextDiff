@@ -1,5 +1,7 @@
 import React, { useMemo, useRef } from 'react';
 import { Version } from '../types';
+import DiffIcon from './icons/DiffIcon';
+import ToggleSwitch from './ToggleSwitch';
 
 // Declare the global Diff object from the CDN script for TypeScript
 declare const Diff: {
@@ -15,11 +17,23 @@ interface DiffPaneProps {
   comparisonText: string;
   comparisonVersionId: string | null;
   versions: Version[];
+  onLoadComparison: (versionId: string) => void;
+  scrollRef: React.RefObject<HTMLDivElement>;
+  isSyncScroll: boolean;
+  onToggleSyncScroll: () => void;
 }
 
-const DiffPane: React.FC<DiffPaneProps> = ({ currentText, comparisonText, comparisonVersionId, versions }) => {
+const DiffPane: React.FC<DiffPaneProps> = ({ 
+  currentText, 
+  comparisonText, 
+  comparisonVersionId, 
+  versions, 
+  onLoadComparison, 
+  scrollRef, 
+  isSyncScroll, 
+  onToggleSyncScroll 
+}) => {
   const lineNumbersRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
 
   const comparisonVersionName = useMemo(() => {
      if (!comparisonVersionId) return 'No version selected';
@@ -40,8 +54,8 @@ const DiffPane: React.FC<DiffPaneProps> = ({ currentText, comparisonText, compar
   }, [comparisonText]);
 
   const handleScroll = () => {
-    if (lineNumbersRef.current && contentRef.current) {
-      lineNumbersRef.current.scrollTop = contentRef.current.scrollTop;
+    if (lineNumbersRef.current && scrollRef.current) {
+      lineNumbersRef.current.scrollTop = scrollRef.current.scrollTop;
     }
   };
 
@@ -79,9 +93,31 @@ const DiffPane: React.FC<DiffPaneProps> = ({ currentText, comparisonText, compar
 
   return (
     <div className="flex flex-col bg-brand-surface rounded-lg shadow-lg overflow-hidden border border-brand-border">
-      <div className="p-3 bg-slate-800 border-b border-brand-border">
-        <h2 className="text-lg font-semibold text-white">Comparison</h2>
-        <p className="text-sm text-brand-text-dim">{comparisonVersionName}</p>
+      <div className="p-3 bg-slate-800 border-b border-brand-border flex justify-between items-center flex-wrap gap-2">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Comparison</h2>
+          <p className="text-sm text-brand-text-dim">{comparisonVersionName}</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <ToggleSwitch 
+            label="Sync Scroll"
+            isChecked={isSyncScroll}
+            onChange={onToggleSyncScroll}
+          />
+          <div className="relative group flex items-center px-3 py-2 rounded-md hover:bg-slate-700 transition-colors">
+            <DiffIcon />
+            <select
+              value={comparisonVersionId || ''}
+              onChange={(e) => onLoadComparison(e.target.value)}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              aria-label="Select version for comparison"
+            >
+              <option value="" disabled>Compare With...</option>
+              {versions.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+            </select>
+            <span className="ml-2 text-sm hidden sm:inline">Compare</span>
+          </div>
+        </div>
       </div>
       <div className="flex-1 flex overflow-hidden">
         <div
@@ -93,7 +129,7 @@ const DiffPane: React.FC<DiffPaneProps> = ({ currentText, comparisonText, compar
             <div key={i} className="pl-4">{i + 1}</div>
           ))}
         </div>
-        <div ref={contentRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
+        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
           {renderDiff()}
         </div>
       </div>
