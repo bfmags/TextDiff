@@ -29,7 +29,7 @@ interface EditorPaneProps {
   onFileUpload: (file: File) => void;
   onCopyToClipboard: () => void;
   scrollRef: React.RefObject<HTMLDivElement>;
-  onGeminiReview: () => void;
+  onGeminiReview: (reviewType: 'line' | 'dev' | 'copy') => void;
   isReviewing: boolean;
   onClearEditor: () => void;
   paneTitle: string;
@@ -82,6 +82,7 @@ const EditorPane: React.FC<EditorPaneProps> = ({
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLoadSubMenuOpen, setIsLoadSubMenuOpen] = useState(false);
+  const [isReviewMenuOpen, setIsReviewMenuOpen] = useState(false);
   
   const wordCount = useMemo(() => {
     const words = content.trim().match(/\S+/g);
@@ -92,6 +93,8 @@ const EditorPane: React.FC<EditorPaneProps> = ({
 
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const reviewMenuRef = useRef<HTMLDivElement>(null);
+  const reviewButtonRef = useRef<HTMLButtonElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -104,12 +107,20 @@ const EditorPane: React.FC<EditorPaneProps> = ({
       ) {
         setIsMenuOpen(false);
       }
+      if (
+        reviewMenuRef.current &&
+        !reviewMenuRef.current.contains(event.target as Node) &&
+        reviewButtonRef.current &&
+        !reviewButtonRef.current.contains(event.target as Node)
+      ) {
+        setIsReviewMenuOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [menuRef, menuButtonRef]);
+  }, [menuRef, menuButtonRef, reviewMenuRef, reviewButtonRef]);
 
   useEffect(() => {
     if (!isMenuOpen) {
@@ -140,15 +151,54 @@ const EditorPane: React.FC<EditorPaneProps> = ({
           <p className="text-sm text-brand-text-dim">{versionName}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={onGeminiReview}
-            className="group flex items-center px-3 py-2 rounded-md hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={isReviewing}
-            aria-label="Gemini Review"
-          >
-            <GeminiIcon />
-            <span className="ml-2 text-sm hidden sm:inline">{isReviewing ? 'Reviewing...' : 'Review'}</span>
-          </button>
+          <div className="relative">
+            <button
+                ref={reviewButtonRef}
+                onClick={() => setIsReviewMenuOpen(p => !p)}
+                className="group flex items-center px-3 py-2 rounded-md hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isReviewing}
+                aria-label="Gemini Review"
+                aria-haspopup="true"
+                aria-expanded={isReviewMenuOpen}
+            >
+                <GeminiIcon />
+                <span className="ml-2 text-sm hidden sm:inline">{isReviewing ? 'Reviewing...' : 'Review'}</span>
+            </button>
+            {isReviewMenuOpen && (
+              <div
+                ref={reviewMenuRef}
+                className="absolute right-0 top-full mt-2 w-48 bg-slate-700 rounded-md shadow-lg border border-brand-border z-10 py-1"
+                role="menu"
+                aria-orientation="vertical"
+              >
+                <button
+                    onClick={() => { onGeminiReview('dev'); setIsReviewMenuOpen(false); }}
+                    className="w-full text-left flex flex-col gap-1 px-4 py-2 text-sm text-brand-text hover:bg-slate-600"
+                    role="menuitem"
+                >
+                    <span className="font-semibold">Developmental Edit</span>
+                    <span className="text-xs text-brand-text-dim">Pacing, voice, and story.</span>
+                </button>
+                <button
+                    onClick={() => { onGeminiReview('line'); setIsReviewMenuOpen(false); }}
+                    className="w-full text-left flex flex-col gap-1 px-4 py-2 text-sm text-brand-text hover:bg-slate-600"
+                    role="menuitem"
+                >
+                    <span className="font-semibold">Line Edit</span>
+                    <span className="text-xs text-brand-text-dim">Clarity, flow, and impact.</span>
+                </button>
+                <button
+                    onClick={() => { onGeminiReview('copy'); setIsReviewMenuOpen(false); }}
+                    className="w-full text-left flex flex-col gap-1 px-4 py-2 text-sm text-brand-text hover:bg-slate-600"
+                    role="menuitem"
+                >
+                    <span className="font-semibold">Copy Edit</span>
+                    <span className="text-xs text-brand-text-dim">Typos, grammar, and polish.</span>
+                </button>
+              </div>
+            )}
+          </div>
+
 
           <div className="relative">
             <button

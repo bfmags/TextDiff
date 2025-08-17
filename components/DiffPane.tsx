@@ -19,21 +19,24 @@ interface DiffPaneProps {
   currentText: string;
   comparisonText: string;
   onComparisonTextChange: (newText: string) => void;
-  comparisonVersionId: string | null;
-  comparisonVersionName: string;
+  versionName: string;
   versions: Version[];
   onLoadComparison: (versionId: string) => void;
   scrollRef: React.RefObject<HTMLDivElement>;
+  paneTitle: string;
+  isManuscriptMode: boolean;
 }
 
 const DiffPane: React.FC<DiffPaneProps> = ({ 
   currentText, 
   comparisonText, 
   onComparisonTextChange,
-  comparisonVersionName,
+  versionName,
   versions, 
   onLoadComparison, 
   scrollRef, 
+  paneTitle,
+  isManuscriptMode,
 }) => {
   const lineNumbersRef = useRef<HTMLDivElement>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -88,7 +91,7 @@ const DiffPane: React.FC<DiffPaneProps> = ({
   };
 
   const renderDiff = () => {
-    if (!comparisonText) {
+    if (!comparisonText && !isManuscriptMode) {
       return (
         <div className="flex items-center justify-center h-full">
           <p className="text-brand-text-dim pointer-events-none">Paste text here, or load a version to compare.</p>
@@ -123,9 +126,10 @@ const DiffPane: React.FC<DiffPaneProps> = ({
     <div className="flex flex-col bg-brand-surface rounded-lg shadow-lg overflow-hidden border border-brand-border">
       <div className="p-3 bg-slate-800 border-b border-brand-border flex justify-between items-center flex-wrap gap-2">
         <div>
-          <h2 className="text-lg font-semibold text-white">Compare</h2>
-          <p className="text-sm text-brand-text-dim">{comparisonVersionName}</p>
+          <h2 className="text-lg font-semibold text-white">{paneTitle}</h2>
+          <p className="text-sm text-brand-text-dim">{versionName}</p>
         </div>
+        {!isManuscriptMode && (
         <div className="flex items-center gap-2">
            <div className="relative">
             <button
@@ -190,6 +194,7 @@ const DiffPane: React.FC<DiffPaneProps> = ({
             )}
           </div>
         </div>
+        )}
       </div>
       <div className="flex-1 flex overflow-hidden">
         <div
@@ -205,8 +210,8 @@ const DiffPane: React.FC<DiffPaneProps> = ({
             ref={scrollRef} 
             onScroll={handleScroll} 
             className="flex-1 overflow-y-auto focus:outline-none p-4"
-            onPaste={handlePaste}
-            contentEditable
+            onPaste={!isManuscriptMode ? handlePaste : undefined}
+            contentEditable={!isManuscriptMode}
             suppressContentEditableWarning={true}
             style={{ caretColor: 'white' }}
             aria-label="Comparison text, paste to replace"

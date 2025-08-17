@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { GoogleGenAI } from '@google/genai';
 import { Version, Manuscript, Chunk } from './types';
-import { INITIAL_VERSION, GEMINI_REVIEW_PROMPT, MANUSCRIPT_ANALYSIS_PROMPT } from './constants';
+import { INITIAL_VERSION, MANUSCRIPT_ANALYSIS_PROMPT, GEMINI_DEV_EDIT_PROMPT, GEMINI_LINE_EDIT_PROMPT, GEMINI_COPY_EDIT_PROMPT } from './constants';
 import useLocalStorage from './hooks/useLocalStorage';
 import { splitTextIntoChunks } from './utils';
 
@@ -131,7 +131,12 @@ export default function App(): React.ReactNode {
 
   const editorVersionName = useMemo(() => {
      if (manuscript && activeChunkId) {
-        return manuscript.chunks.find(c => c.id === activeChunkId)?.name || 'Manuscript Part';
+        const chunk = manuscript.chunks.find(c => c.id === activeChunkId);
+        const chunkIndex = manuscript.chunks.findIndex(c => c.id === activeChunkId);
+        if (chunk) {
+            return `Part ${chunkIndex + 1} of ${manuscript.chunks.length}`;
+        }
+        return 'Manuscript Part';
      }
      if (!activeVersionId) return 'Unsaved Changes';
      const version = versions.find(v => v.id === activeVersionId);
@@ -248,7 +253,7 @@ export default function App(): React.ReactNode {
         
         const analysisPrompt = MANUSCRIPT_ANALYSIS_PROMPT.replace('{MANUSCRIPT_NAME}', file.name);
         const reportResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: 'gemini-2.5-flash',
             contents: analysisPrompt + `\n\nMANUSCRIPT TEXT:\n---\n${manuscriptText}\n---`,
         });
         const stylisticReport = reportResponse.text;
@@ -282,15 +287,19 @@ export default function App(): React.ReactNode {
         setEditorText(chunk.content);
         setActiveChunkId(chunkId);
         setEditorKey(p => p + 1);
-        // Optionally sync right pane
+        // In manuscript mode, the right pane always shows the original chunk content
         setRightText(chunk.content);
         setRightVersionId(null);
     }
   };
 
-  const handleGeminiReview = async () => {
+  const handleGeminiReview = async (reviewType: 'line' | 'dev' | 'copy') => {
     let baseVersionName = editorVersionName;
     const textToReview = editorText;
+
+    // Set the comparison pane to the text *before* the review
+    setRightText(textToReview);
+    setRightVersionId(manuscript ? null : activeVersionId);
 
     if (!manuscript && !activeVersionId && editorText.trim()) {
       const saveName = `Pre-review save - ${new Date().toLocaleString()}`;
@@ -302,6 +311,7 @@ export default function App(): React.ReactNode {
       };
       setVersions(prev => [...prev, preReviewVersion]);
       setActiveVersionId(preReviewVersion.id);
+      setRightVersionId(preReviewVersion.id); // Also set right pane to this new save
       baseVersionName = saveName;
     }
 
@@ -314,6 +324,7 @@ export default function App(): React.ReactNode {
         return;
       }
       
+      setProcessingMessage("Analyzing text structure...");
       const getWordCount = (str: string) => str.trim().split(/\s+/).filter(Boolean).length;
       
       const paragraphs = textToReview.split(/\n\n+/).filter(p => p.trim());
@@ -323,6 +334,7 @@ export default function App(): React.ReactNode {
           return;
       }
       
+      setProcessingMessage("Breaking text into manageable chunks...");
       const chunks: string[][] = [];
       let currentChunk: string[] = [];
       let currentWordCount = 0;
@@ -343,12 +355,13 @@ export default function App(): React.ReactNode {
       }
 
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      setReviewProgress({ current: 1, total: chunks.length });
+      setReviewProgress({ current: 0, total: chunks.length });
       
       const reviewedChunks: string[] = [];
       let paraIndexCounter = 0;
 
       for (let i = 0; i < chunks.length; i++) {
+        setProcessingMessage(`Editing chunk ${i + 1} of ${chunks.length} with Gemini...`);
         setReviewProgress({ current: i + 1, total: chunks.length });
 
         const chunkParas = chunks[i];
@@ -373,11 +386,17 @@ export default function App(): React.ReactNode {
         const contextPrompt = `Here is the context for the text you are editing. Do not edit or include this context in your response. Only use it to inform your edits of the main text.\n\n**Previous 5 paragraphs:**\n${prevContext || 'N/A'}\n\n**Next 5 paragraphs:**\n${nextContext || 'N/A'}\n\n`;
         
         const reportPrompt = manuscript ? `For additional context, here is a stylistic analysis report for the entire manuscript. Use this to guide your edits for consistency.\n\n**Stylistic Report:**\n---\n${manuscript.stylisticReport}\n---\n\n` : '';
-
-        const fullPrompt = `${reportPrompt}${GEMINI_REVIEW_PROMPT}\n\n${contextPrompt}Now, please apply the editing rules to the following text only:\n\n---\n${textToLineEdit}\n---`;
+        
+        const promptToUse = {
+            'dev': GEMINI_DEV_EDIT_PROMPT,
+            'line': GEMINI_LINE_EDIT_PROMPT,
+            'copy': GEMINI_COPY_EDIT_PROMPT,
+        }[reviewType];
+        
+        const fullPrompt = `${reportPrompt}${promptToUse}\n\n${contextPrompt}Now, please apply the editing rules to the following text only:\n\n---\n${textToLineEdit}\n---`;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: 'gemini-2.5-flash',
             contents: fullPrompt,
         });
         
@@ -389,8 +408,10 @@ export default function App(): React.ReactNode {
         }
       }
       
+      setProcessingMessage("Assembling the edited text...");
       const reviewedText = reviewedChunks.join('\n\n');
 
+      setProcessingMessage("Saving new version...");
       const reviewNumbers = versions
         .map(v => { const match = v.name.match(/^R(\d+)/); return match ? parseInt(match[1], 10) : 0;})
         .filter(num => num > 0);
@@ -398,7 +419,13 @@ export default function App(): React.ReactNode {
       const maxReviewNumber = reviewNumbers.length > 0 ? Math.max(...reviewNumbers) : 0;
       const nextReviewNumber = maxReviewNumber + 1;
       
-      const newVersionName = `R${nextReviewNumber} - ${baseVersionName} - ${new Date().toLocaleString()}`;
+      const editTypeLabel = {
+        'dev': 'Dev Edit',
+        'line': 'Line Edit',
+        'copy': 'Copy Edit',
+      }[reviewType];
+
+      const newVersionName = `R${nextReviewNumber} - ${editTypeLabel} - ${baseVersionName} - ${new Date().toLocaleString()}`;
       
       const newVersion: Version = {
         id: `version-${Date.now()}`,
@@ -421,6 +448,7 @@ export default function App(): React.ReactNode {
     } finally {
       setIsReviewing(false);
       setReviewProgress(null);
+      setProcessingMessage(null);
     }
   };
 
@@ -448,9 +476,9 @@ export default function App(): React.ReactNode {
                     <div className="text-center">
                         {isReviewing && <BookLoader />}
                         <h1 className="book-loader-text">{processingMessage || 'Reviewing'}</h1>
-                        {isReviewing && reviewProgress && (
+                        {isReviewing && reviewProgress && reviewProgress.total > 0 && (
                            <p className="text-white text-lg font-semibold">
-                                Chunk {reviewProgress.current} of {reviewProgress.total}
+                                Reviewing {reviewProgress.current} of {reviewProgress.total}
                            </p>
                         )}
                         <p className="text-brand-text-dim mt-2">
@@ -488,11 +516,12 @@ export default function App(): React.ReactNode {
             currentText={editorText}
             comparisonText={rightText}
             onComparisonTextChange={handleRightTextChange}
-            comparisonVersionId={rightVersionId}
-            comparisonVersionName={rightVersionName}
+            versionName={manuscript ? editorVersionName : rightVersionName}
             versions={versions}
             onLoadComparison={handleLoadRightPane}
             scrollRef={comparisonScrollRef}
+            paneTitle={manuscript ? "Original" : "Compare"}
+            isManuscriptMode={!!manuscript}
             />
         </main>
       </div>
